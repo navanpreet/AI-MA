@@ -1,0 +1,458 @@
+package token;
+
+import java.io.BufferedWriter;
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Scanner;
+import java.util.regex.Pattern;
+
+class AtomicClause {
+	ArrayList<String> predicate = new ArrayList<String>();
+	ArrayList<ArrayList<String>> arguments = new ArrayList<ArrayList<String>>();
+	public AtomicClause(ArrayList<String> predicate, ArrayList<ArrayList<String>> arguments)
+	{
+		this.predicate=predicate;
+		this.arguments=arguments;
+	}
+}
+
+class Facts {
+	String predicate="";
+	ArrayList<String> arguments = new ArrayList<String>();
+	public Facts(String predicate, ArrayList<String> arguments){
+		this.predicate=predicate;
+		this.arguments=arguments;
+	}
+}
+
+class Clause {
+	
+	AtomicClause antecedent;
+	AtomicClause consequent;
+	Facts queries; 
+	Facts facts;
+	String line;
+	String query;
+	
+	void getQuery(String query){
+		this.query=query;
+		String predicate;
+		String args;
+		predicate = query.split("\\(")[0];
+		args = query.split("\\(")[1];
+		args = args.replace(")", "").trim();
+		String [] argsArray = args.split(",");
+		ArrayList<String> argumentList = new ArrayList<String>();
+		for(String arg : argsArray)
+			argumentList.add(arg);
+		queries = new Facts(predicate, argumentList);
+		}
+	
+	void createAtomicClause(ArrayList<String> predicate, ArrayList<ArrayList<String>> arguments){
+		antecedent = new AtomicClause(predicate, arguments);
+	}
+
+	void getLine(String line){
+		this.line=line;
+		String[] l=line.split("=>");
+		String[] predicate;
+		if(l.length==1){
+			predicate = l[0].split("\\(");
+			predicate[1] = predicate[1].replace(")", "").trim();
+			System.out.println("Pred1 is" +predicate[1]);
+			ArrayList<String> argumentList = new ArrayList<String>();
+			System.out.println("Predicate of fact is "+predicate[1]);
+			String predSplit[] = predicate[1].split(",");
+			for(int i=0;i<predSplit.length;i++)
+			argumentList.add(predSplit[i]);
+			facts = new Facts(predicate[0],argumentList);
+		}
+		else{
+			ArrayList<String> term = new ArrayList<String>();
+			ArrayList<String> pred = new ArrayList<String>();
+			ArrayList<ArrayList<String>> terms = new ArrayList<ArrayList<String>>();
+			predicate = l[0].split("\\^");
+			for (int i = 0; i < predicate.length; i++){
+				term = new ArrayList<>();
+				String[] subPredicate = predicate[i].trim().split("\\(");
+				pred.add(subPredicate[0]);
+				subPredicate[1] = subPredicate[1].replace(")","").trim();
+				String subSubPredicate[] = subPredicate[1].split(",");
+				for(int j=0;j<subSubPredicate.length;j++)
+					{	
+						term.add(subSubPredicate[j].trim());
+					}
+				terms.add(term);
+				antecedent = new AtomicClause(pred, terms);
+				
+			}
+			pred = new ArrayList<>();
+			term = new ArrayList<>();
+			terms = new ArrayList<>();
+			predicate = l[1].split("\\(");
+			pred.add(predicate[0].trim());
+			predicate[1] = predicate[1].replace(")", "").trim();
+			ArrayList<String> argumentList = new ArrayList<String>();
+			predicate[1] = predicate[1].replace(")", "").trim();
+			String subPredicate[] = predicate[1].split(",");
+			for(int i = 0;i<subPredicate.length;i++)
+			term.add(subPredicate[i].trim());
+			terms.add(term);
+			consequent = new AtomicClause(pred, terms);
+		}
+	}
+}
+
+public class inference {
+
+	static ArrayList<Facts> clauseStore = new ArrayList<Facts>();
+	static int counter=1;
+	
+	static Clause standardize(Clause wrongClause){
+		
+		ArrayList<ArrayList<String>> standardAntecedentStringWrapper = new ArrayList<ArrayList<String>>();
+		ArrayList<ArrayList<String>> standardConsequentStringWrapper = new ArrayList<ArrayList<String>>();
+		
+		for( ArrayList<String> c : wrongClause.antecedent.arguments ){
+			ArrayList<String> standardAntecedentString = new ArrayList<>();
+			for(String s : c){
+				if(s.matches("[a-z]")){
+				s = s+counter;
+				}
+				standardAntecedentString.add(s);
+			}	
+			standardAntecedentStringWrapper.add(standardAntecedentString);
+		}
+		for(ArrayList<String> c : wrongClause.consequent.arguments){
+			ArrayList<String> standardConsequentString = new ArrayList<>();
+			for(String s : c){
+				if(s.matches("[a-z]")){
+					s = s+counter;
+				}
+				standardConsequentString.add(s);
+			}
+			standardConsequentStringWrapper.add(standardConsequentString);
+		}
+		
+		Clause standardClause = new Clause();
+		standardClause.antecedent = new AtomicClause(wrongClause.antecedent.predicate, standardAntecedentStringWrapper); 
+		standardClause.consequent = new AtomicClause(wrongClause.consequent.predicate, standardConsequentStringWrapper);
+		counter++;
+		return standardClause;
+	}
+	
+	static boolean match(ArrayList<Facts> clauseStore, Facts goal){
+		
+		for(Facts fact : clauseStore){
+			boolean flag = true;
+			for(int i = 0; i < fact.arguments.size(); i++) {
+				String goalArg = goal.arguments.get(i);
+				String clauseStoreFactArg = fact.arguments.get(i);
+				
+				if(!fact.predicate.equals(goal.predicate)) {
+					flag = false;
+					break;
+				}
+			
+				if((goalArg.charAt(0) >= 'A' && goalArg.charAt(0) <= 'Z')&&(clauseStoreFactArg.charAt(0) >= 'A' && clauseStoreFactArg.charAt(0) <= 'Z')) {
+					if(!goalArg.equals(clauseStoreFactArg)){
+						flag = false;
+						break;
+					}
+				} 
+				else if((goalArg.charAt(0) >= 'a' && goalArg.charAt(0) <= 'z')&&(clauseStoreFactArg.charAt(0) >= 'a' && clauseStoreFactArg.charAt(0) <= 'z')){
+
+				}
+				else{
+					flag = false;
+					break;
+				}
+			}
+			if(flag)
+				return true;
+		}
+		return false;
+	}
+	
+	static void printKb(ArrayList<Clause> Kb){
+		
+		for(Clause ck : Kb){
+			System.out.println("Kb ante is "+ ck.antecedent.predicate+"Kb ante args "+ck.antecedent.arguments+" Kb conse is "+ck.consequent.predicate+" conse args "+ck.consequent.arguments);
+		}
+		System.out.println();
+		System.out.println();
+	}
+	
+	static void printFl(ArrayList<Clause> Fl){
+		
+		for(Clause ck : Fl){
+			System.out.println("FL ante is "+ ck.facts.predicate+" Fl ante args "+ck.facts.arguments);
+		}
+		System.out.println();
+		System.out.println();
+	}
+	
+	static ArrayList<Clause> factList = new ArrayList<Clause>();
+	
+	static ArrayList<HashMap<String, String>> ask(ArrayList<Clause> Kb, Facts query){
+		return or(Kb, query, new HashMap<String, String>());	
+	}
+	
+	static ArrayList<HashMap<String, String>> or(ArrayList<Clause> Kb, Facts goal, HashMap<String, String> theta){
+		System.out.println("Goal in or is "+goal.predicate);
+		boolean goalExists = match(clauseStore, goal);
+		if(goalExists==false) //added to stop infinite loop
+		{
+			clauseStore.add(goal);
+		} else {
+			return null;
+		}
+		
+		ArrayList<HashMap<String, String>> possibleMatches = new ArrayList<HashMap<String,String>>();
+		
+		for( Clause f : factList){
+			if(goal.predicate.equals(f.facts.predicate)){
+				HashMap<String,String> proxyTheta = new HashMap<>();
+				proxyTheta = (HashMap<String, String>) theta.clone();
+				proxyTheta = unify(f.facts.arguments, goal.arguments, proxyTheta);
+				if(proxyTheta!=null)
+				{
+					possibleMatches.add(proxyTheta);
+				}
+			}
+		}	
+		
+		for(Clause c : Kb){
+			if(c.consequent.predicate.get(0).equals(goal.predicate)){
+				Clause standardizedClause = standardize(c);
+				HashMap<String, String> proxyTheta = (HashMap<String, String>) theta.clone();
+				ArrayList<HashMap<String, String>> intermediateMatch = and(Kb, standardizedClause, unify(standardizedClause.consequent.arguments.get(0), goal.arguments, proxyTheta)) ; 
+				if(intermediateMatch!=null){
+				possibleMatches.addAll(intermediateMatch);
+				}
+			}
+		}
+		clauseStore.remove(goal); //added later to run cases, still dont understand what this does
+	return possibleMatches;
+	}
+	
+	static ArrayList<HashMap<String, String>> and(ArrayList<Clause> Kb, Clause ante, HashMap<String, String> map){
+		ArrayList<HashMap<String, String>> yieldMatches = new ArrayList<HashMap<String,String>>();
+		System.out.println("Clause in and is "+ante.antecedent.predicate);
+		
+		if(map==null)
+			return null;
+		
+		else if(ante.antecedent.arguments.isEmpty()){
+			yieldMatches.add(map);
+			return yieldMatches;
+		}
+		
+		else{
+			ArrayList<String> predicateCopy = (ArrayList<String>) ante.antecedent.predicate.clone();
+			String firstPredicate = predicateCopy.remove(0);
+			ArrayList<String> firstPredicateWrapper = new ArrayList<>();
+			firstPredicateWrapper.add(firstPredicate);
+			
+			ArrayList<ArrayList<String>> argsCopy = (ArrayList<ArrayList<String>>) ante.antecedent.arguments.clone();
+			ArrayList<String> firstArguments = argsCopy.remove(0);
+			ArrayList<ArrayList<String>> firstArgumentsWrapper = new ArrayList<>();
+			firstArgumentsWrapper.add(firstArguments);
+			
+			Clause firstTerm = new Clause();
+			firstTerm.createAtomicClause(firstPredicateWrapper, firstArgumentsWrapper);
+			ArrayList<HashMap<String, String>> thetaPrime = or(Kb, substitute(map, firstTerm), map);
+			
+			Clause anteClone = new Clause();
+			ArrayList<ArrayList<String>> anteArgumentsWrapper = new ArrayList<>();
+			anteArgumentsWrapper.addAll(argsCopy);
+
+			anteClone.createAtomicClause(predicateCopy, anteArgumentsWrapper);
+			
+			if(thetaPrime!=null)
+			{
+				for(HashMap<String, String> thetaPotential : thetaPrime){
+					ArrayList<HashMap<String,String>> thetaPrimePrime = and(Kb, anteClone, thetaPotential);
+					if(thetaPotential!=null){
+						yieldMatches.addAll(thetaPrimePrime);
+					}
+				}
+			}
+		}
+		return yieldMatches;
+	}
+	
+	static Facts substitute(HashMap<String, String> theta, Clause c){
+		
+		
+		ArrayList<String> list = c.antecedent.arguments.get(0);
+		ArrayList<String> newList = new ArrayList<>();
+		
+		for(String s : list){
+			if(s.matches("^[a-z0-9]*")){
+				if(theta.containsKey(s)){
+					s = theta.get(s);
+				}
+			}
+			newList.add(s);
+		}
+		Facts f = new Facts(c.antecedent.predicate.get(0), newList);
+		return f;
+	}
+	
+	
+	static HashMap<String, String> unify(ArrayList<String> x, ArrayList<String> y, HashMap<String, String> theta){
+			
+			
+			if(x.size()!=y.size()){
+				return null;
+			}
+			else if(x.isEmpty() || y.isEmpty()){
+				return theta;
+			}
+			else if(theta==null){
+				return null;
+			}
+			else if(x.equals(y)){
+				return theta;
+			}
+			else if(x.get(0).matches("^[a-z0-9]*")&&x.size()==1){
+				return unifyVar(x,y,theta);
+			}
+			else if(y.get(0).matches("^[a-z0-9]*")&&y.size()==1){
+				return unifyVar(y,x,theta);
+			}
+			else if(!(x.get(0).matches("^[a-z0-9]*"))&&!(y.get(0).matches("^[a-z0-9]*"))){
+				ArrayList<String> xClone = (ArrayList<String>) x.clone();
+				ArrayList<String> yClone = (ArrayList<String>) y.clone();
+				String match1 = x.get(0);
+				String match2 = y.get(0);
+				if(!match1.equals(match2)){
+					return null;
+				}
+				xClone.remove(0);
+				yClone.remove(0);
+				return unify(xClone, yClone, theta);
+			}
+			else if(x.size()>1&&y.size()>1){
+				if(x.size()!=y.size()){
+					return null;
+				}
+				ArrayList<String> p = new ArrayList<String>();
+				ArrayList<String> q = new ArrayList<String>();
+				ArrayList<String> xClone = (ArrayList<String>) x.clone();
+				ArrayList<String> yClone = (ArrayList<String>) y.clone();
+				p.add(xClone.get(0));
+				q.add(yClone.get(0));
+				String match1 = x.get(0);
+				String match2 = y.get(0);
+				xClone.remove(0);
+				yClone.remove(0);
+				return unify(xClone,yClone,unify(p,q,theta));
+			}
+			else{
+			return null;
+			}
+	}
+	
+	static HashMap<String, String> unifyVar(ArrayList<String> var, ArrayList<String> x, HashMap<String, String> theta){
+		if(var.get(0).charAt(0) >= 'A' && var.get(0).charAt(0) <= 'Z' &&  x.get(0).charAt(0) >= 'A' && x.get(0).charAt(0) <= 'Z' ) {
+			if(var.get(0).equals(x.get(0)))
+				return theta;
+			else
+				return null;
+		}
+		if(theta.keySet().contains(var.get(0))){
+			ArrayList<String> wrapper = new ArrayList<>();
+			wrapper.add(theta.get(var.get(0)));
+			return unifyVar(wrapper,x,theta);
+		}
+		else if(theta.keySet().contains(x.get(0))){
+			ArrayList<String> wrapper = new ArrayList<>();
+			wrapper.add(theta.get(x.get(0)));
+			return unifyVar(var,wrapper,theta);
+		}
+		else{
+			substitution(theta, var, x);
+			return theta;
+		}
+	}
+	static HashMap<String, String> substitution(HashMap<String, String> theta, ArrayList<String> var, ArrayList<String> x){
+		theta.put(var.get(0), x.get(0));
+		return theta;
+	}
+	public static void main(String[] args) throws IOException {
+		
+		ArrayList<String> z = new ArrayList<>();
+		ArrayList<Clause> Kb = new ArrayList<Clause>();
+		ArrayList<Facts> queryList = new ArrayList<Facts>();
+		ArrayList<Clause> clauseList = new ArrayList<Clause>();
+		
+		ArrayList<ArrayList<String>> con = new ArrayList<ArrayList<String>>();
+		Clause queryObject = new Clause();
+		File inp = new File("input_1.txt");
+		Scanner sc = new Scanner(inp);
+		String queries = sc.nextLine();
+		int numberOfQueries = Integer.parseInt(queries);
+		for (int i = 0; i < numberOfQueries; i++) {
+			String line = sc.nextLine();
+			queryObject.getQuery(line);
+			queryList.add(queryObject.queries);
+		}
+		
+			Clause cc = new Clause();
+			Clause c2 = new Clause();
+			inference p = new inference();
+			Map<Clause, Clause> t = new HashMap<Clause, Clause>();
+			Map<String, String> M = new HashMap<String, String>();
+			ArrayList<String> n1 = new ArrayList<>();
+			for(Clause key : t.keySet()) {
+				Clause value = t.get(key);
+				if(key.antecedent!=null)
+					System.out.println("variable is "+key.antecedent.arguments);
+				if(value.facts!=null)
+					System.out.println("value is " + value.facts.arguments.get(0));
+			}
+		String clauses = sc.nextLine();
+		int numberOfClauses = Integer.parseInt(clauses);
+		for (int i = 0; i < numberOfClauses; i++) {
+			Clause co = new Clause();
+			String line = sc.nextLine();
+			if(line.split("=>").length==1){
+				co.getLine(line);
+				factList.add(co);
+			}
+			else if(line.split("=>").length>1){
+				co.getLine(line);
+				clauseList.add(co);
+				Kb.add(co);
+			}
+		}
+		
+		FileWriter fs= new FileWriter("output.txt");
+    	BufferedWriter bf = new BufferedWriter(fs);	
+		
+		for(Facts ft : queryList){
+			clauseStore = new ArrayList<>();
+			ArrayList<HashMap<String, String>> finalAnswer = ask(Kb,ft);
+			if(finalAnswer!=null && !finalAnswer.isEmpty())
+			{
+				bf.write("TRUE");
+				bf.newLine();
+			}
+			else
+				{
+				bf.write("FALSE");
+				bf.newLine();
+				}
+			System.out.println("Final answer "+finalAnswer);
+			
+		}
+		bf.close();
+	}
+}
